@@ -1,17 +1,17 @@
 {
   "name": "discord-community-bot",
   "version": "1.0.0",
-  "description": "Discordコミュニティサーバー用ボット",
+  "description": "Discordコミュニティサーバー用シンプルボット",
   "main": "index.js",
   "scripts": {
-    "start": "node --require ./polyfill.js index.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "13.14.0",
-    "fs": "^0.0.1-security",
-    "path": "^0.12.7"
+    "discord.js": "12.5.3",
+    "fs": "0.0.1-security",
+    "path": "0.12.7"
   },
   "engines": {
-    "node": ">=16.9.0"
+    "node": "16.x"
   }
 }
