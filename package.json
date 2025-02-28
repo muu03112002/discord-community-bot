@@ -4,10 +4,12 @@
   "description": "Discordコミュニティサーバー用ボット",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node --require ./polyfill.js index.js"
   },
   "dependencies": {
-    "discord.js": "14.9.0"
+    "discord.js": "13.14.0",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
   },
   "engines": {
     "node": ">=16.9.0"
