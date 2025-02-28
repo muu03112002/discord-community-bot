@@ -414,3 +414,8 @@ client.on('error', (error) => {
 
 // ボットにログインする
 client.login(process.env.DISCORD_TOKEN);
+
+// ReadableStreamのポリフィルチェック（念のため）
+if (typeof ReadableStream === 'undefined') {
+  console.log("ReadableStream is not defined, using polyfill.js");
+}
