@@ -1,18 +1,19 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField, EmbedBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+// discord.js バージョン14用のコード
+
+const { Client, GatewayIntentBits, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
-// ボットのインテント（権限）設定
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
-  ]
-});
+// config.jsonからトークンを読み込む
+let config;
+try {
+  config = require('./config.json');
+} catch (error) {
+  // config.jsonがない場合は環境変数から読み込む
+  config = { token: process.env.DISCORD_TOKEN };
+}
 
-// 設定ファイルの保存先
+// ロール設定用のフォルダとファイル
 const configFolderPath = path.join(__dirname, 'config');
 if (!fs.existsSync(configFolderPath)) {
   fs.mkdirSync(configFolderPath, { recursive: true });
@@ -33,54 +34,32 @@ const loadRoleConfig = (guildId) => {
   return { roles: [] };
 };
 
-// ボットの準備完了時のイベント
-client.once('ready', () => {
-  console.log(`準備完了: ${client.user.tag}でログインしました`);
+// クライアントの初期化
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates
+  ],
+  partials: [Partials.Channel]
 });
 
-// メッセージ受信時のイベント処理
-client.on('messageCreate', async (message) => {
-  // botのメッセージは無視
+// Botが起動したときのイベント
+client.once('ready', () => {
+  console.log(`${client.user.tag} が起動しました！`);
+});
+
+// メッセージに反応するイベント
+client.on('messageCreate', async message => {
+  // Botからのメッセージは無視
   if (message.author.bot) return;
 
-  // 管理者権限チェック（コマンド実行者が管理者であることを確認）
+  // 管理者権限チェック
   const isAdmin = message.member && message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-  // setupコマンド処理
-  if (message.content.startsWith('!setup') && isAdmin) {
-    const args = message.content.split(' ').slice(1);
-    
-    // ロール設定コマンド
-    if (args[0] === 'role') {
-      // !setup role <ボタンテキスト> <ロールID>
-      if (args.length >= 3) {
-        const buttonText = args[1];
-        const roleId = args[2];
-        
-        // ロールが存在するか確認
-        const role = message.guild.roles.cache.get(roleId);
-        if (!role) {
-          return message.reply('指定されたロールが見つかりません。正しいロールIDを指定してください。');
-        }
-        
-        // 設定を保存
-        const config = loadRoleConfig(message.guild.id);
-        const existingRoleIndex = config.roles.findIndex(r => r.buttonText === buttonText);
-        
-        if (existingRoleIndex !== -1) {
-          config.roles[existingRoleIndex].roleId = roleId;
-        } else {
-          config.roles.push({ buttonText, roleId });
-        }
-        
-        saveRoleConfig(message.guild.id, config);
-        return message.reply(`ボタン「${buttonText}」にロール「${role.name}」を設定しました。`);
-      } else {
-        return message.reply('使用方法: !setup role <ボタンテキスト> <ロールID>');
-      }
-    }
-    
-    // メインのセットアップメニュー
+  // !setupコマンドに反応（管理者のみ）
+  if (message.content === '!setup' && isAdmin) {
     const row = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
@@ -103,11 +82,42 @@ client.on('messageCreate', async (message) => {
 
     await message.reply({ content: 'セットアップするシステムを選択してください：', components: [row] });
   }
+
+  // ロール設定コマンド
+  if (message.content.startsWith('!setup role') && isAdmin) {
+    const args = message.content.split(' ').slice(2);
+    
+    if (args.length >= 2) {
+      const buttonText = args[0];
+      const roleId = args[1];
+      
+      // ロールが存在するか確認
+      const role = message.guild.roles.cache.get(roleId);
+      if (!role) {
+        return message.reply('指定されたロールが見つかりません。正しいロールIDを指定してください。');
+      }
+      
+      // 設定を保存
+      const config = loadRoleConfig(message.guild.id);
+      const existingRoleIndex = config.roles.findIndex(r => r.buttonText === buttonText);
+      
+      if (existingRoleIndex !== -1) {
+        config.roles[existingRoleIndex].roleId = roleId;
+      } else {
+        config.roles.push({ buttonText, roleId });
+      }
+      
+      saveRoleConfig(message.guild.id, config);
+      return message.reply(`ボタン「${buttonText}」にロール「${role.name}」を設定しました。`);
+    } else {
+      return message.reply('使用方法: !setup role <ボタンテキスト> <ロールID>');
+    }
+  }
 });
 
-// ボタンクリックイベント処理
-client.on('interactionCreate', async (interaction) => {
-  // ボタンクリック以外は無視
+// ボタンクリックに反応するイベント
+client.on('interactionCreate', async interaction => {
+  // ボタンクリックでなければ無視
   if (!interaction.isButton()) return;
   
   const { customId, guild, channel, member } = interaction;
@@ -123,7 +133,7 @@ client.on('interactionCreate', async (interaction) => {
     if (customId === 'setup_phone_verification') {
       const embed = new EmbedBuilder()
         .setTitle('🔒 電話番号認証ガイド 🔒')
-        .setDescription('ようこそ。\n本サーバーでは、安全性を確保するために電話番号認証をお願いしています。ご理解頂ける方は下記から認証を行ってください。')
+        .setDescription('ようこそ。\n本サーバーでは、安全性を確保するために電話番号認証をお願いしています。以下の手順に従って認証を行ってください。')
         .addFields(
           { name: '⚠️ 注意', value: '* 電話番号認証はサーバーの安全性を高めるために必須です。\n* 一度認証を行うと、今後は電話番号を変更しない限り再認証の必要はありません。' },
           { name: '\u200B', value: 'ご不明点があれば、運営までお知らせください。' }
@@ -266,6 +276,7 @@ client.on('interactionCreate', async (interaction) => {
   
   // ボイスチャンネル作成ボタン
   else if (customId === 'create_voice_channel') {
+    // モーダルを作成（名前入力用のポップアップ）
     const modal = new ModalBuilder()
       .setCustomId('voice_channel_modal')
       .setTitle('ボイスチャンネル作成');
@@ -286,8 +297,8 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// モーダル送信イベント処理
-client.on('interactionCreate', async (interaction) => {
+// モーダル送信に反応するイベント
+client.on('interactionCreate', async interaction => {
   if (!interaction.isModalSubmit()) return;
   
   const { customId, guild, channel, member } = interaction;
@@ -299,43 +310,25 @@ client.on('interactionCreate', async (interaction) => {
     const channelName = interaction.fields.getTextInputValue('channel_name');
     
     try {
-      // カテゴリーを取得（または作成）
-      let category = guild.channels.cache.find(c => c.name === '一時的なボイスチャンネル' && c.type === ChannelType.GuildCategory);
-      
-      if (!category) {
-        category = await guild.channels.create({
-          name: '一時的なボイスチャンネル',
-          type: ChannelType.GuildCategory
-        });
-      }
-      
-      // ボイスチャンネル作成
+      // ボイスチャンネルを作成
       const voiceChannel = await guild.channels.create({
         name: channelName,
-        type: ChannelType.GuildVoice,
-        parent: category.id
+        type: 2, // 2 = ボイスチャンネル
+        parent: channel.parent // 同じカテゴリに作成
       });
       
+      // 作成者をそのチャンネルに移動（すでにVCにいる場合）
+      if (member.voice.channel) {
+        await member.voice.setChannel(voiceChannel);
+      }
+      
       await interaction.editReply({ 
-        content: `ボイスチャンネル「${channelName}」を作成しました。10秒以内に参加してください。`,
+        content: `✅ ボイスチャンネル「${channelName}」を作成しました。10秒以内に参加してください。`,
         ephemeral: true 
       });
       
-      // 10秒後にチェック
-      setTimeout(async () => {
-        try {
-          // チャンネルが存在するか確認
-          const updatedChannel = await guild.channels.fetch(voiceChannel.id).catch(() => null);
-          if (!updatedChannel) return;
-          
-          // メンバーがいなければ削除
-          if (updatedChannel.members.size === 0) {
-            await updatedChannel.delete('自動削除: 10秒以内に誰も参加しませんでした');
-          }
-        } catch (error) {
-          console.error('チャンネル確認中にエラーが発生しました:', error);
-        }
-      }, 10000);
+      // 空のチャンネルをチェックする関数を設定
+      checkEmptyChannel(voiceChannel);
       
     } catch (error) {
       console.error('ボイスチャンネル作成中にエラーが発生しました:', error);
@@ -365,40 +358,40 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-// ボイスチャンネルの状態変更イベント
-client.on('voiceStateUpdate', async (oldState, newState) => {
-  // ユーザーがボイスチャンネルから退出した場合
-  if (oldState.channelId && !newState.channelId) {
-    const channel = oldState.channel;
-    
-    // チャンネルが存在し、カテゴリーが「一時的なボイスチャンネル」である場合
-    if (channel && channel.parent && channel.parent.name === '一時的なボイスチャンネル') {
-      // チャンネル内のメンバーがいないかチェック
-      if (channel.members.size === 0) {
-        // 10秒待ってから再度確認
+// 空のボイスチャンネルをチェックして削除する関数
+function checkEmptyChannel(channel) {
+  const interval = setInterval(async () => {
+    // チャンネルがまだ存在するか確認
+    try {
+      // チャンネルをフェッチして最新の状態を取得
+      const fetchedChannel = await client.channels.fetch(channel.id);
+      
+      // メンバーがいなくなったら
+      if (fetchedChannel.members.size === 0) {
+        // 10秒待機
         setTimeout(async () => {
           try {
-            // チャンネルが存在するか確認
-            const updatedChannel = await oldState.guild.channels.fetch(channel.id).catch(() => null);
-            if (!updatedChannel) return;
-            
-            // メンバーがいなければ削除
-            if (updatedChannel.members.size === 0) {
-              await updatedChannel.delete('自動削除: 全メンバーが退出してから10秒経過');
+            // もう一度チャンネルをフェッチして、まだ空かどうか確認
+            const recheckChannel = await client.channels.fetch(channel.id);
+            if (recheckChannel.members.size === 0) {
+              await recheckChannel.delete();
+              console.log(`ボイスチャンネル「${recheckChannel.name}」を削除しました。`);
             }
           } catch (error) {
             console.error('チャンネル削除中にエラーが発生しました:', error);
           }
-        }, 10000);
+          
+          // このチャンネルのチェックを停止
+          clearInterval(interval);
+        }, 10000); // 10秒
       }
+    } catch (error) {
+      // チャンネルが既に削除されている場合
+      console.error('チャンネルチェック中にエラーが発生しました:', error);
+      clearInterval(interval);
     }
-  }
-});
+  }, 5000); // 5秒ごとにチェック
+}
 
-// エラーハンドリング
-client.on('error', (error) => {
-  console.error('エラーが発生しました:', error);
-});
-
-// ボットにログインする
-client.login(process.env.DISCORD_TOKEN);
+// Botにログイン
+client.login(config.token);
