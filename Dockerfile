@@ -1,14 +1,10 @@
-FROM node:18
+FROM node:16
 
 WORKDIR /app
 
-# 依存関係のインストール前に環境変数を設定
-ENV NODE_OPTIONS="--no-warnings --experimental-modules"
-
 COPY package.json ./
-COPY polyfill.js ./
-RUN npm install
+RUN npm install --production
 
 COPY . .
 
-CMD ["npm", "start"]
+CMD ["node", "index.js"]
